@@ -1,0 +1,23 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        
+        {
+            "name": "Python: Bot",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/bot.py",
+            "console": "integratedTerminal",
+            "preLaunchTask": "init-db",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "autoReload": {"enable": false, "include": [
+                "**/*.py",
+                "**/*.pyw"
+            ]},
+            "envFile": "${workspaceFolder}/.env",
+            "justMyCode": true
+        }
+    ]
+}

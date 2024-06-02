@@ -38,3 +38,8 @@ docker-build:
 .PHONY: docker-run
 docker-run:
 	docker run -d --name breast-feeding-bot breast-feeding-bot
+
+# Initialize the database
+.PHONY: init-db
+init-db: venv
+	$(PYTHON) create_tables.py
