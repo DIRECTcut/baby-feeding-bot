@@ -17,6 +17,7 @@ class FeedingLog(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'))
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    feeding_type = Column(String)  # New column for feeding type
     user = relationship('User')
 
 # Create an engine and a session
@@ -24,4 +25,3 @@ class FeedingLog(Base):
 engine = create_engine('sqlite:///data/bot.db')
 Base.metadata.create_all(engine)
 SessionLocal = sessionmaker(bind=engine)
-

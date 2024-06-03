@@ -27,8 +27,9 @@ TELEGRAM_USERNAME_WHITELIST = os.environ['TELEGRAM_USERNAME_WHITELIST'].split(',
 TELEGRAM_TOKEN = os.environ['TELEGRAM_TOKEN']
 
 # Define states
-CHOOSING_ACTION, CHOOSE_TIME_OPTION, CHOOSE_DAY, ENTER_TIME = range(4)
+CHOOSING_ACTION, CHOOSE_TIME_OPTION, CHOOSE_FEEDING_TYPE = range(3)
 NOW_CALLBACK, FIVE_MINUTES_AGO_CALLBACK, TEN_MINUTES_AGO_CALLBACK, FIFTEEN_MINUTES_AGO_CALLBACK, THIRTY_MINUTES_AGO_CALLBACK, FORTY_FIVE_MINUTES_AGO_CALLBACK, ONE_HOUR_AGO_CALLBACK = range(7)
+BOTTLE_CALLBACK, LEFT_BREAST_CALLBACK, RIGHT_BREAST_CALLBACK = range(7, 10)
 
 # Define inline keyboards
 inline_keyboard = [
@@ -46,6 +47,13 @@ time_option_keyboard = [
     [InlineKeyboardButton("1 час назад", callback_data=str(ONE_HOUR_AGO_CALLBACK))],
 ]
 time_option_markup = InlineKeyboardMarkup(time_option_keyboard)
+
+feeding_type_keyboard = [
+    [InlineKeyboardButton("Бутылочка", callback_data=str(BOTTLE_CALLBACK))],
+    [InlineKeyboardButton("Левая грудь", callback_data=str(LEFT_BREAST_CALLBACK))],
+    [InlineKeyboardButton("Правая грудь", callback_data=str(RIGHT_BREAST_CALLBACK))],
+]
+feeding_type_markup = InlineKeyboardMarkup(feeding_type_keyboard)
 
 # Define the Argentina timezone
 ARGENTINA_TZ = pytz.timezone('America/Argentina/Buenos_Aires')
@@ -93,15 +101,28 @@ async def choose_time_option(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if query.data in time_deltas:
         feeding_datetime_argentina = datetime.now(ARGENTINA_TZ) - time_deltas[query.data]
         feeding_datetime_utc = feeding_datetime_argentina.astimezone(pytz.utc)
-        await log_feeding(update, context, feeding_datetime_utc)
-        await delete_log_message(update, context)
-        await send_message(update, 
-            "Добавить еще?",
-            reply_markup=inline_markup,
-        )
-        return CHOOSING_ACTION
+        context.user_data["feeding_datetime"] = feeding_datetime_utc
+        await query.edit_message_text("Выберите тип кормления:", reply_markup=feeding_type_markup)
+        return CHOOSE_FEEDING_TYPE
 
-async def log_feeding(update: Update, context: ContextTypes.DEFAULT_TYPE, feeding_datetime: datetime) -> None:
+async def choose_feeding_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle the user's choice of feeding type."""
+    query = update.callback_query
+    await query.answer()
+    context.user_data["feeding_type"] = query.data
+    
+    feeding_datetime = context.user_data["feeding_datetime"]
+    feeding_type = query.data
+
+    await log_feeding(update, context, feeding_datetime, feeding_type)
+    await delete_log_message(update, context)
+    await send_message(update, 
+        "Добавить еще?",
+        reply_markup=inline_markup,
+    )
+    return CHOOSING_ACTION
+
+async def log_feeding(update: Update, context: ContextTypes.DEFAULT_TYPE, feeding_datetime: datetime, feeding_type: str) -> None:
     """Function to log feeding into the database."""
     user_id = update.effective_user.id
     username = update.effective_user.username
@@ -116,14 +137,19 @@ async def log_feeding(update: Update, context: ContextTypes.DEFAULT_TYPE, feedin
         session.commit()
 
     # Create a new feeding log
-    feeding_log = FeedingLog(user_id=user.id, timestamp=feeding_datetime)
+    feeding_log = FeedingLog(user_id=user.id, timestamp=feeding_datetime, feeding_type=feeding_type)
     session.add(feeding_log)
     session.commit()
 
     # Convert the feeding time back to Argentina timezone for display
     feeding_datetime_argentina = feeding_datetime.astimezone(ARGENTINA_TZ)
     formatted_time = feeding_datetime_argentina.strftime("%H:%M")
-    await send_message(update, f'Кормление записано на {formatted_time}!')
+    feeding_type_text = {
+        str(BOTTLE_CALLBACK): "Бутылочка",
+        str(LEFT_BREAST_CALLBACK): "Левая грудь",
+        str(RIGHT_BREAST_CALLBACK): "Правая грудь"
+    }[feeding_type]
+    await send_message(update, f'Кормление записано на {formatted_time} ({feeding_type_text})!')
 
 async def send_message(update: Update, text: str, reply_markup=None) -> None:
     """Send a message to the user, handling both message and callback_query contexts."""
@@ -152,7 +178,7 @@ def main() -> None:
     # Create the Application and pass it your bot's token.
     application = Application.builder().token(TELEGRAM_TOKEN).build()
 
-    # Add conversation handler with the states CHOOSING_ACTION, CHOOSE_TIME_OPTION, CHOOSE_DAY, and ENTER_TIME
+    # Add conversation handler with the states CHOOSING_ACTION, CHOOSE_TIME_OPTION, and CHOOSE_FEEDING_TYPE
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
@@ -161,6 +187,9 @@ def main() -> None:
             ],
             CHOOSE_TIME_OPTION: [
                 CallbackQueryHandler(choose_time_option, pattern=f'^{str(NOW_CALLBACK)}|{str(FIVE_MINUTES_AGO_CALLBACK)}|{str(TEN_MINUTES_AGO_CALLBACK)}|{str(FIFTEEN_MINUTES_AGO_CALLBACK)}|{str(THIRTY_MINUTES_AGO_CALLBACK)}|{str(FORTY_FIVE_MINUTES_AGO_CALLBACK)}|{str(ONE_HOUR_AGO_CALLBACK)}$'),
+            ],
+            CHOOSE_FEEDING_TYPE: [
+                CallbackQueryHandler(choose_feeding_type, pattern=f'^{str(BOTTLE_CALLBACK)}|{str(LEFT_BREAST_CALLBACK)}|{str(RIGHT_BREAST_CALLBACK)}$'),
             ],
         },
         fallbacks=[MessageHandler(filters.Regex("^Done$"), done)],
