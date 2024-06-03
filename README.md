@@ -15,7 +15,7 @@ source venv/bin/activate
 **After** installing new packages:
 
 ```sh
-freeze > requirements.txt
+pip freeze > requirements.txt
 ```
 
 ## Production

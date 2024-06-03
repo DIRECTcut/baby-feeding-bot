@@ -2,6 +2,7 @@ import logging
 import os
 from datetime import datetime, timedelta
 import pytz
+from tzlocal import get_localzone
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
@@ -34,6 +35,7 @@ BOTTLE_CALLBACK, LEFT_BREAST_CALLBACK, RIGHT_BREAST_CALLBACK = range(7, 10)
 # Define inline keyboards
 inline_keyboard = [
     [InlineKeyboardButton("Записать кормление", callback_data='log_feeding')],
+    [InlineKeyboardButton("Проверить последнее кормление", callback_data='check_last_feeding')],
 ]
 inline_markup = InlineKeyboardMarkup(inline_keyboard)
 
@@ -55,8 +57,8 @@ feeding_type_keyboard = [
 ]
 feeding_type_markup = InlineKeyboardMarkup(feeding_type_keyboard)
 
-# Define the Argentina timezone
-ARGENTINA_TZ = pytz.timezone('America/Argentina/Buenos_Aires')
+USER_TZ = pytz.timezone('America/Argentina/Buenos_Aires')
+SERVER_TZ = get_localzone()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Start the conversation and ask user for an action."""
@@ -64,7 +66,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         return update.message.reply_text("Nothing of interest here")
 
     await update.message.reply_text(
-        "Привет! Давайте запишем новое кормление. Выберите опцию ниже:",
+        "Привет! Давайте запишем новое кормление или проверим последнее кормление. Выберите опцию ниже:",
         reply_markup=inline_markup
     )
     return CHOOSING_ACTION
@@ -78,8 +80,11 @@ async def choose_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         message = await query.edit_message_text("Когда произошло кормление?", reply_markup=time_option_markup)
         context.user_data['log_message_id'] = message.message_id
         return CHOOSE_TIME_OPTION
+    elif query.data == 'check_last_feeding':
+        await check_last_feeding(update, context)
+        return CHOOSING_ACTION
 
-    await query.edit_message_text("Неверный выбор. Пожалуйста, выберите 'Записать кормление'.")
+    await query.edit_message_text("Неверный выбор. Пожалуйста, выберите 'Записать кормление' или 'Проверить последнее кормление'.")
     return CHOOSING_ACTION
 
 async def choose_time_option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -99,9 +104,9 @@ async def choose_time_option(update: Update, context: ContextTypes.DEFAULT_TYPE)
     }
 
     if query.data in time_deltas:
-        feeding_datetime_argentina = datetime.now(ARGENTINA_TZ) - time_deltas[query.data]
-        feeding_datetime_utc = feeding_datetime_argentina.astimezone(pytz.utc)
-        context.user_data["feeding_datetime"] = feeding_datetime_utc
+        feeding_datetime_argentina = datetime.now(USER_TZ) - time_deltas[query.data]
+        feeding_datetime_server = feeding_datetime_argentina.astimezone(SERVER_TZ)
+        context.user_data["feeding_datetime"] = feeding_datetime_server
         await query.edit_message_text("Выберите тип кормления:", reply_markup=feeding_type_markup)
         return CHOOSE_FEEDING_TYPE
 
@@ -142,7 +147,7 @@ async def log_feeding(update: Update, context: ContextTypes.DEFAULT_TYPE, feedin
     session.commit()
 
     # Convert the feeding time back to Argentina timezone for display
-    feeding_datetime_argentina = feeding_datetime.astimezone(ARGENTINA_TZ)
+    feeding_datetime_argentina = feeding_datetime.astimezone(USER_TZ)
     formatted_time = feeding_datetime_argentina.strftime("%H:%M")
     feeding_type_text = {
         str(BOTTLE_CALLBACK): "Бутылочка",
@@ -150,6 +155,32 @@ async def log_feeding(update: Update, context: ContextTypes.DEFAULT_TYPE, feedin
         str(RIGHT_BREAST_CALLBACK): "Правая грудь"
     }[feeding_type]
     await send_message(update, f'Кормление записано на {formatted_time} ({feeding_type_text})!')
+
+async def check_last_feeding(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Function to check and display the last feeding log."""
+    user_id = update.effective_user.id
+    username = update.effective_user.username
+
+    session = SessionLocal()
+
+    # Fetch the last feeding log for the user
+    last_feeding_log = session.query(FeedingLog).join(User).filter(User.username == username).order_by(FeedingLog.timestamp.desc()).first()
+    
+    if last_feeding_log:
+        # Convert the feeding time back to Argentina timezone for display
+        feeding_datetime_argentina = last_feeding_log.timestamp.astimezone(USER_TZ)
+        formatted_time = feeding_datetime_argentina.strftime("%H:%M")
+        time_elapsed = datetime.now(USER_TZ) - feeding_datetime_argentina
+        hours, remainder = divmod(time_elapsed.seconds, 3600)
+        minutes, _ = divmod(remainder, 60)
+        feeding_type_text = {
+            "7": "Бутылочка",
+            "8": "Левая грудь",
+            "9": "Правая грудь"
+        }[last_feeding_log.feeding_type]
+        await send_message(update, f'Последнее кормление было в {formatted_time} ({feeding_type_text}). Прошло времени: {hours} часов {minutes} минут.')
+    else:
+        await send_message(update, "Нет записей о кормлении.")
 
 async def send_message(update: Update, text: str, reply_markup=None) -> None:
     """Send a message to the user, handling both message and callback_query contexts."""
@@ -183,7 +214,7 @@ def main() -> None:
         entry_points=[CommandHandler("start", start)],
         states={
             CHOOSING_ACTION: [
-                CallbackQueryHandler(choose_action, pattern='^log_feeding$'),
+                CallbackQueryHandler(choose_action, pattern='^log_feeding$|^check_last_feeding$'),
             ],
             CHOOSE_TIME_OPTION: [
                 CallbackQueryHandler(choose_time_option, pattern=f'^{str(NOW_CALLBACK)}|{str(FIVE_MINUTES_AGO_CALLBACK)}|{str(TEN_MINUTES_AGO_CALLBACK)}|{str(FIFTEEN_MINUTES_AGO_CALLBACK)}|{str(THIRTY_MINUTES_AGO_CALLBACK)}|{str(FORTY_FIVE_MINUTES_AGO_CALLBACK)}|{str(ONE_HOUR_AGO_CALLBACK)}$'),
