@@ -1,10 +1,11 @@
 from asyncio import Queue
 import logging
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import CallbackQueryHandler, CommandHandler, CallbackContext, ApplicationBuilder, ContextTypes
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
+from telegram.ext import CallbackQueryHandler, CommandHandler, CallbackContext, ApplicationBuilder, ContextTypes, ConversationHandler, MessageHandler, filters
 from models import User, Group, UserGroup, FeedingLog
 from db import SessionLocal
 from sqlalchemy.orm import Session
+import os
 
 # Enable logging
 logging.basicConfig(
@@ -13,9 +14,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+CHOOSING_ACTION, ENTER_GROUP_NAME = range(2)
+
+TEST_ACTION, JOIN_GROUP, CREATE_GROUP = range(3)
+
 # Your bot token from BotFather
 # FIXME: move to .env
-TOKEN = '6976133506:AAGZI8hjMU_4QsLqzxCPhfyIXw8g0gaIYUU'
+TOKEN = os.environ['TELEGRAM_TOKEN']
 
 def init_user_if_not_exist(db: Session, username: str) -> int:
     user = db.query(User).filter_by(username=username).first()
@@ -30,21 +35,46 @@ def init_user_if_not_exist(db: Session, username: str) -> int:
         return user.id
 
 # Command handlers
-def start(update: Update, context: CallbackContext) -> None:
+async def start(update: Update, context: CallbackContext) -> None:
     """Send a message when the command /start is issued."""
-    init_user_if_not_exist(SessionLocal(), update.message.from_user.username)
+    user_id = init_user_if_not_exist(SessionLocal(), update.message.from_user.username)
+    logger.info("User %s started the conversation.", user_id)
 
+    # reply_keyboard = [
+    #     ["Create Group", "Join Group"],
+    #     ["Done"],
+    # ]
+    # reply_markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
+    # await update.callback_query.answer()
     keyboard = [
         [
-            InlineKeyboardButton("Option 1", callback_data="1"),
-            InlineKeyboardButton("Option 2", callback_data="2"),
-        ],
-        [InlineKeyboardButton("Option 3", callback_data="3")],
+            InlineKeyboardButton("Some action", callback_data=str(TEST_ACTION)),
+            # InlineKeyboardButton("Log new feeding", callback_data=str(JOIN_GROUP)),
+            # InlineKeyboardButton("Create new group", callback_data=str(CREATE_GROUP)),
+        ]
+        # ,
+        # [InlineKeyboardButton("Option 3", callback_data="3")],
     ]
-
+    # reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True)
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    return update.message.reply_text("Please choose:", reply_markup=reply_markup)
+
+
+    # Define the conversation handler with states
+    # conv_handler = ConversationHandler(
+    #     entry_points=[CommandHandler('start', start)],
+    #     states={
+    #         ENTER_TEXT: [MessageHandler(Filters.text & ~Filters.command, enter_text)],
+    #     },
+    #     fallbacks=[CommandHandler('cancel', cancel)],
+    # )
+
+
+
+
+
+    await update.message.reply_text("Please choose:", reply_markup=reply_markup)
+    return CHOOSING_ACTION
 
     # return update.message.reply_text('Hi! Use /create_group to create a new group or /join_group to join an existing group.')
 
@@ -130,6 +160,8 @@ def main() -> None:
     """Start the bot."""
 
     application = ApplicationBuilder().token(TOKEN).build()
+    # TODO?: https://docs.python-telegram-bot.org/en/stable/telegram.ext.conversationhandler.html#:~:text=heavily%20relies%20on%20incoming%20updates%20being
+    # application.concurrent_updates = False
     # handler = CommandHandler('start', start)
     # Create the Bot instance
     # bot = Bot(TOKEN)
@@ -144,14 +176,33 @@ def main() -> None:
     # dp = Dispatcher(bot, update_queue, use_context=True)
 
     # Register command handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("create_group", create_group))
-    application.add_handler(CommandHandler("join_group", join_group))
-    application.add_handler(CommandHandler("log_feeding", log_feeding))
-    application.add_handler(CommandHandler("set_interval", set_interval))
-    application.add_handler(CommandHandler("leave_group", leave_group))
-    application.add_handler(CommandHandler("kick_member", kick_member))
-    application.add_handler(CallbackQueryHandler(button))
+    # application.add_handler(CommandHandler("start", start))
+    # application.add_handler(CommandHandler("create_group", create_group))
+    # application.add_handler(CommandHandler("join_group", join_group))
+    # application.add_handler(CommandHandler("log_feeding", log_feeding))
+    # application.add_handler(CommandHandler("set_interval", set_interval))
+    # application.add_handler(CommandHandler("leave_group", leave_group))
+    # application.add_handler(CommandHandler("kick_member", kick_member))
+    # application.add_handler(CallbackQueryHandler(button))
+
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
+        states={
+            CHOOSING_ACTION: [
+                CallbackQueryHandler(test_action, pattern=f"^{str(TEST_ACTION)}$"),
+                CallbackQueryHandler(set_user_is_joining_group, pattern=f"^{str(JOIN_GROUP)}$"),
+                CallbackQueryHandler(set_user_is_creating_group, pattern=f"^{str(CREATE_GROUP)}$"),
+            ],
+            ENTER_GROUP_NAME: [
+                MessageHandler(
+                    filters.TEXT & ~(filters.COMMAND | filters.Regex("^Done$")), enter_group_name
+                )
+            ],
+        },
+        fallbacks=[MessageHandler(filters.Regex("^Done$"), done)],
+    )
+
+    application.add_handler(conv_handler)
 
     # Start the Bot
     application.run_polling()
@@ -159,14 +210,66 @@ def main() -> None:
     # Run the bot until you press Ctrl-C or the process receives SIGINT, SIGTERM, or SIGABRT
     # updater.idle()
 
+async def test_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+
+    return
+
+async def set_user_is_joining_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data["action"] = JOIN_GROUP
+
+    return 
+
+async def set_user_is_creating_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data["action"] = CREATE_GROUP
+
+
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Parses the CallbackQuery and updates the message text."""
     query = update.callback_query
 
     # CallbackQueries need to be answered, even if no notification to the user is needed
     # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
-    await query.answer()
+    await query.answer('testing')
 
     await query.edit_message_text(text=f"Selected option: {query.data}")
+
+async def choose_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle the user's choice of action."""
+    text = update.message.text.lower()
+    context.user_data["action"] = text
+    
+    if text == "create group":
+        await update.message.reply_text("Please enter the name of the group to create:")
+    elif text == "join group":
+        await update.message.reply_text("Please enter the name of the group to join:")
+    else:
+        await update.message.reply_text("Invalid choice. Please choose 'Create Group' or 'Join Group'.")
+
+    return ENTER_GROUP_NAME
+
+async def enter_group_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle the user's input of the group name."""
+    group_name = update.message.text
+    action = context.user_data["action"]
+
+    if action == "create group":
+        await create_group(update, context, group_name)
+    elif action == "join group":
+        await join_group(update, context, group_name)
+
+    await update.message.reply_text(
+        "Done"
+        # reply_markup=markup,
+    )
+    return CHOOSING_ACTION
+
+async def done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """End the conversation."""
+    await update.message.reply_text(
+        "Goodbye! Have a nice day!",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    return ConversationHandler.END
+
 if __name__ == '__main__':
     main()
