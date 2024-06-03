@@ -1,31 +1,12 @@
 {
     "version": "0.2.0",
     "configurations": [
-        
         {
             "name": "Python: Bot",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/bot.py",
-            "console": "integratedTerminal",
-            "preLaunchTask": "init-db",
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}"
-            },
-            "autoReload": {"enable": true, "include": [
-                "**/*.py",
-                "**/*.pyw"
-            ]},
-            "envFile": "${workspaceFolder}/.env",
-            "justMyCode": true
-        },
-        {
-            "name": "Python: test",
-            "type": "debugpy",
-            "request": "launch",
             "program": "${workspaceFolder}/_test.py",
             "console": "integratedTerminal",
-            // "preLaunchTask": "init-db",
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             },

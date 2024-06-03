@@ -4,15 +4,12 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "init-db",
+            "label": "reset-db",
             "type": "shell",
-            "command": "make init-db"
-        },
-        {
-            "label": "rm-db",
-            "type": "shell",
-            "command": "rm data/bot.db",
+            "command": "rm data/bot.db && make init-db",
+            
             "problemMatcher": []
-        }
+        },
+
     ]
 }
