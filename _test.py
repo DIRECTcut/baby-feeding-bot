@@ -1,6 +1,7 @@
 import logging
 import os
 from datetime import datetime, timedelta
+import pytz
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
@@ -14,7 +15,7 @@ from telegram.ext import (
 )
 
 from db import SessionLocal
-from models import FeedingLog, Group, User
+from models import FeedingLog, User
 
 # Enable logging
 logging.basicConfig(
@@ -46,9 +47,12 @@ time_option_keyboard = [
 ]
 time_option_markup = InlineKeyboardMarkup(time_option_keyboard)
 
+# Define the Argentina timezone
+ARGENTINA_TZ = pytz.timezone('America/Argentina/Buenos_Aires')
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Start the conversation and ask user for an action."""
-    if(update.effective_user.username not in TELEGRAM_USERNAME_WHITELIST):
+    if update.effective_user.username not in TELEGRAM_USERNAME_WHITELIST:
         return update.message.reply_text("Nothing of interest here")
 
     await update.message.reply_text(
@@ -87,8 +91,9 @@ async def choose_time_option(update: Update, context: ContextTypes.DEFAULT_TYPE)
     }
 
     if query.data in time_deltas:
-        feeding_datetime = datetime.now() - time_deltas[query.data]
-        await log_feeding(update, context, feeding_datetime)
+        feeding_datetime_argentina = datetime.now(ARGENTINA_TZ) - time_deltas[query.data]
+        feeding_datetime_utc = feeding_datetime_argentina.astimezone(pytz.utc)
+        await log_feeding(update, context, feeding_datetime_utc)
         await delete_log_message(update, context)
         await send_message(update, 
             "Добавить еще?",
@@ -100,9 +105,6 @@ async def log_feeding(update: Update, context: ContextTypes.DEFAULT_TYPE, feedin
     """Function to log feeding into the database."""
     user_id = update.effective_user.id
     username = update.effective_user.username
-    
-    # Assuming we have a way to get the group_id, here we use a placeholder
-    group_id = 1  # Replace this with the actual group_id
 
     session = SessionLocal()
 
@@ -113,19 +115,14 @@ async def log_feeding(update: Update, context: ContextTypes.DEFAULT_TYPE, feedin
         session.add(user)
         session.commit()
 
-    # Fetch the group (TODO: allow to select groups)
-    group = session.query(Group).order_by(Group.id).first()
-    if not group:
-        await send_message(update, "Группа не найдена.")
-        return
-
     # Create a new feeding log
-    feeding_log = FeedingLog(user_id=user.id, group_id=group.id, timestamp=feeding_datetime)
+    feeding_log = FeedingLog(user_id=user.id, timestamp=feeding_datetime)
     session.add(feeding_log)
     session.commit()
 
-    # Format the datetime to show only hours and minutes
-    formatted_time = feeding_datetime.strftime("%H:%M")
+    # Convert the feeding time back to Argentina timezone for display
+    feeding_datetime_argentina = feeding_datetime.astimezone(ARGENTINA_TZ)
+    formatted_time = feeding_datetime_argentina.strftime("%H:%M")
     await send_message(update, f'Кормление записано на {formatted_time}!')
 
 async def send_message(update: Update, text: str, reply_markup=None) -> None:
