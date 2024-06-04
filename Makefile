@@ -4,6 +4,7 @@
 VENV_DIR = venv
 PYTHON = $(VENV_DIR)/bin/python
 PIP = $(VENV_DIR)/bin/pip
+IMAGE_NAME = breast-feeding-bot
 
 # Default target
 .PHONY: all
@@ -14,9 +15,10 @@ all: help
 help:
 	@echo "Usage:"
 	@echo "  make venv           Create a virtual environment and install dependencies"
-	@echo "  make dev            Run the bot in development mode"
-	@echo "  make docker-build   Build the Docker image (TODO)"
-	@echo "  make docker-run     Run the Docker container (TODO)"
+	@echo "  make run            Run the bot in development mode"
+	@echo "  make docker-build   Build the Docker image"
+	@echo "  make docker-run     Run the Docker container"
+	@echo "  make init-db        Initialize the database"
 
 # Create a virtual environment and install dependencies
 .PHONY: venv
@@ -32,12 +34,12 @@ run:
 # Build the Docker image
 .PHONY: docker-build
 docker-build:
-	docker build -t breast-feeding-bot .
+	docker build -t $(IMAGE_NAME) .
 
 # Run the Docker container
 .PHONY: docker-run
 docker-run:
-	docker run -d --name breast-feeding-bot breast-feeding-bot
+	docker run -d --name $(IMAGE_NAME) --env-file .env $(IMAGE_NAME)
 
 # Initialize the database
 .PHONY: init-db
