@@ -8,4 +8,4 @@ services:
       - ./data:/app/data
     ports:
       - "8443:8443"
-    command: ["python", "bot.py"]
+    # command: ["python", "bot.py"]

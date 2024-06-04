@@ -18,18 +18,18 @@ from telegram.ext import (
     JobQueue
 )
 
+from env import (
+    TELEGRAM_USERNAME_WHITELIST,
+    TELEGRAM_TOKEN,
+    NOTIFICATION_JOB_QUEUE_INTERVAL_SECONDS,
+    NOTIFICATION_JOB_QUEUE_FIRST_SECONDS,
+    NOTIFY_IF_UNFED_FOR_SECONDS
+)
+
+from log import logger
+
 from db import SessionLocal
 from models import FeedingLog, User
-
-# Enable logging
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
-logger = logging.getLogger(__name__)
-
-TELEGRAM_USERNAME_WHITELIST = os.environ['TELEGRAM_USERNAME_WHITELIST'].split(',')
-TELEGRAM_TOKEN = os.environ['TELEGRAM_TOKEN']
-NOTIFICATION_INTERVAL_MINUTES = int(os.environ['NOTIFICATION_INTERVAL_MINUTES'])
 
 # Define states
 CHOOSING_ACTION, CHOOSE_TIME_OPTION, CHOOSE_FEEDING_TYPE = range(3)
@@ -222,7 +222,7 @@ async def notify_users(context: CallbackContext) -> None:
     """Notify users if the feeding interval has passed."""
     session = SessionLocal()
     now = datetime.now(SERVER_TZ)  # Ensure `now` is timezone-aware
-    notification_interval = timedelta(minutes=NOTIFICATION_INTERVAL_MINUTES)
+    notification_interval = timedelta(seconds=NOTIFY_IF_UNFED_FOR_SECONDS)
 
     for username in TELEGRAM_USERNAME_WHITELIST:
         user = session.query(User).filter_by(username=username).first()
@@ -247,7 +247,6 @@ async def notify_users(context: CallbackContext) -> None:
                         chat_id=user.id,
                         text=f'Прошло {int(time_passed_minutes)} минут с последнего кормления в {formatted_time}. Пожалуйста, проверьте.'
                     )
-
 
 def main() -> None:
     """Run the bot."""
@@ -276,8 +275,7 @@ def main() -> None:
     # Initialize job queue
     job_queue = application.job_queue
     if job_queue is not None:
-        # FIXME: move magic values to top of file
-        job_queue.run_repeating(notify_users, interval=timedelta(minutes=5), first=timedelta(seconds=10))
+        job_queue.run_repeating(notify_users, interval=timedelta(seconds=NOTIFICATION_JOB_QUEUE_INTERVAL_SECONDS), first=timedelta(seconds=NOTIFICATION_JOB_QUEUE_FIRST_SECONDS))
     else:
         logger.error("Job queue is not initialized properly.")
 

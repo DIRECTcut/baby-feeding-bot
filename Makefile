@@ -30,7 +30,7 @@ venv:
 # Run the bot in development mode
 .PHONY: run
 run:
-	$(PYTHON) bot.py
+	$(PYTHON) src/bot.py
 
 # Build the Docker image
 .PHONY: docker-build
@@ -45,4 +45,4 @@ docker-run:
 # Initialize the database
 .PHONY: init-db
 init-db: venv
-	$(PYTHON) create_tables.py
+	$(PYTHON) src/create_tables.py

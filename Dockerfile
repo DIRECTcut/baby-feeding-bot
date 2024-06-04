@@ -17,4 +17,4 @@ EXPOSE 8443
 ENV NAME BreastFeedingBot
 
 # Run bot.py when the container launches
-CMD ["python", "bot.py"]
+CMD ["python", "src/bot.py"]

@@ -2,10 +2,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Bot",
+            "name": "(dev) Python: Bot",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/_test.py",
+            "program": "${workspaceFolder}/src/bot.py",
             "console": "integratedTerminal",
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
@@ -14,7 +14,7 @@
                 "**/*.py",
                 "**/*.pyw"
             ]},
-            "envFile": "${workspaceFolder}/.env",
+            "envFile": "${workspaceFolder}/.env.dev",
             "justMyCode": true
         }
     ]
