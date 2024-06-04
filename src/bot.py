@@ -33,7 +33,7 @@ from models import FeedingLog, User
 
 # Define states
 CHOOSING_ACTION, CHOOSE_TIME_OPTION, CHOOSE_FEEDING_TYPE = range(3)
-NOW_CALLBACK, FIVE_MINUTES_AGO_CALLBACK, TEN_MINUTES_AGO_CALLBACK, FIFTEEN_MINUTES_AGO_CALLBACK, THIRTY_MINUTES_AGO_CALLBACK, FORTY_FIVE_MINUTES_AGO_CALLBACK, ONE_HOUR_AGO_CALLBACK = range(7)
+NOW_CALLBACK, FIVE_MINUTES_AGO_CALLBACK, FIFTEEN_MINUTES_AGO_CALLBACK, THIRTY_MINUTES_AGO_CALLBACK, FORTY_FIVE_MINUTES_AGO_CALLBACK, ONE_HOUR_AGO_CALLBACK = range(6)
 BOTTLE_CALLBACK, LEFT_BREAST_CALLBACK, RIGHT_BREAST_CALLBACK = range(7, 10)
 
 # Define inline keyboards
@@ -46,7 +46,6 @@ inline_markup = InlineKeyboardMarkup(inline_keyboard)
 time_option_keyboard = [
     [InlineKeyboardButton("Сейчас", callback_data=str(NOW_CALLBACK))],
     [InlineKeyboardButton("5 минут назад", callback_data=str(FIVE_MINUTES_AGO_CALLBACK))],
-    [InlineKeyboardButton("10 минут назад", callback_data=str(TEN_MINUTES_AGO_CALLBACK))],
     [InlineKeyboardButton("15 минут назад", callback_data=str(FIFTEEN_MINUTES_AGO_CALLBACK))],
     [InlineKeyboardButton("30 минут назад", callback_data=str(THIRTY_MINUTES_AGO_CALLBACK))],
     [InlineKeyboardButton("45 минут назад", callback_data=str(FORTY_FIVE_MINUTES_AGO_CALLBACK))],
@@ -105,7 +104,6 @@ async def choose_time_option(update: Update, context: ContextTypes.DEFAULT_TYPE)
     time_deltas = {
         str(NOW_CALLBACK): timedelta(),
         str(FIVE_MINUTES_AGO_CALLBACK): timedelta(minutes=5),
-        str(TEN_MINUTES_AGO_CALLBACK): timedelta(minutes=10),
         str(FIFTEEN_MINUTES_AGO_CALLBACK): timedelta(minutes=15),
         str(THIRTY_MINUTES_AGO_CALLBACK): timedelta(minutes=30),
         str(FORTY_FIVE_MINUTES_AGO_CALLBACK): timedelta(minutes=45),
@@ -271,7 +269,7 @@ def main() -> None:
                 CallbackQueryHandler(choose_action, pattern='^log_feeding$|^check_last_feeding$'),
             ],
             CHOOSE_TIME_OPTION: [
-                CallbackQueryHandler(choose_time_option, pattern=f'^{str(NOW_CALLBACK)}$|^{str(FIVE_MINUTES_AGO_CALLBACK)}$|^{str(TEN_MINUTES_AGO_CALLBACK)}$|^{str(FIFTEEN_MINUTES_AGO_CALLBACK)}$|^{str(THIRTY_MINUTES_AGO_CALLBACK)}$|^{str(FORTY_FIVE_MINUTES_AGO_CALLBACK)}$|^{str(ONE_HOUR_AGO_CALLBACK)}$'),
+                CallbackQueryHandler(choose_time_option, pattern=f'^{str(NOW_CALLBACK)}$|^{str(FIVE_MINUTES_AGO_CALLBACK)}$|^{str(FIFTEEN_MINUTES_AGO_CALLBACK)}$|^{str(THIRTY_MINUTES_AGO_CALLBACK)}$|^{str(FORTY_FIVE_MINUTES_AGO_CALLBACK)}$|^{str(ONE_HOUR_AGO_CALLBACK)}$'),
             ],
             CHOOSE_FEEDING_TYPE: [
                 CallbackQueryHandler(choose_feeding_type, pattern=f'^{str(BOTTLE_CALLBACK)}$|^{str(LEFT_BREAST_CALLBACK)}$|^{str(RIGHT_BREAST_CALLBACK)}$'),
