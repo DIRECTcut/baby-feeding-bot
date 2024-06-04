@@ -19,6 +19,7 @@ help:
 	@echo "  make docker-build   Build the Docker image"
 	@echo "  make docker-run     Run the Docker container"
 	@echo "  make init-db        Initialize the database"
+	@echo "  make migrate-db     Migrate the database to the new setup"
 
 # Create a virtual environment and install dependencies
 .PHONY: venv
