@@ -82,7 +82,8 @@ async def choose_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     await query.answer()
     
     if query.data == 'log_feeding':
-        await query.edit_message_text("Когда произошло кормление?", reply_markup=time_option_markup)
+        message = await query.edit_message_text("Когда произошло кормление?", reply_markup=time_option_markup)
+        context.user_data['time_option_message_id'] = message.message_id
         return CHOOSE_TIME_OPTION
     elif query.data == 'check_last_feeding':
         await check_last_feeding(update, context)
@@ -115,7 +116,8 @@ async def choose_time_option(update: Update, context: ContextTypes.DEFAULT_TYPE)
         feeding_datetime_argentina = datetime.now(USER_TZ) - time_deltas[query.data]
         feeding_datetime_server = feeding_datetime_argentina.astimezone(SERVER_TZ)
         context.user_data["feeding_datetime"] = feeding_datetime_server
-        await query.edit_message_text("Выберите тип кормления:", reply_markup=feeding_type_markup)
+        message = await query.edit_message_text("Выберите тип кормления:", reply_markup=feeding_type_markup)
+        context.user_data['feeding_type_message_id'] = message.message_id
         return CHOOSE_FEEDING_TYPE
 
 async def choose_feeding_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -129,6 +131,7 @@ async def choose_feeding_type(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     await log_feeding(update, context, feeding_datetime, feeding_type)
     await delete_log_message(update, context)
+    await delete_feeding_type_message(update, context)
     await send_message(update, 
         "Добавить еще?",
         reply_markup=inline_markup,
@@ -211,6 +214,14 @@ async def delete_log_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except Exception as e:
             logger.error(f"Не удалось удалить сообщение: {e}")
 
+async def delete_feeding_type_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Delete the feeding type message after the user selects a feeding type."""
+    if 'feeding_type_message_id' in context.user_data:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=context.user_data['feeding_type_message_id'])
+        except Exception as e:
+            logger.error(f"Не удалось удалить сообщение: {e}")
+
 async def done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """End the conversation."""
     await update.message.reply_text(
@@ -226,7 +237,6 @@ async def notify_users(context: CallbackContext) -> None:
 
     for username in TELEGRAM_USERNAME_WHITELIST:
         user = session.query(User).filter_by(username=username).first()
-        # FIXME: early return
         if user:
             last_feeding_log = session.query(FeedingLog).filter_by(user_id=user.id).order_by(FeedingLog.timestamp.desc()).first()
             if last_feeding_log:
@@ -261,10 +271,10 @@ def main() -> None:
                 CallbackQueryHandler(choose_action, pattern='^log_feeding$|^check_last_feeding$'),
             ],
             CHOOSE_TIME_OPTION: [
-                CallbackQueryHandler(choose_time_option, pattern=f'^{str(NOW_CALLBACK)}|{str(FIVE_MINUTES_AGO_CALLBACK)}|{str(TEN_MINUTES_AGO_CALLBACK)}|{str(FIFTEEN_MINUTES_AGO_CALLBACK)}|{str(THIRTY_MINUTES_AGO_CALLBACK)}|{str(FORTY_FIVE_MINUTES_AGO_CALLBACK)}|{str(ONE_HOUR_AGO_CALLBACK)}$'),
+                CallbackQueryHandler(choose_time_option, pattern=f'^{str(NOW_CALLBACK)}$|^{str(FIVE_MINUTES_AGO_CALLBACK)}$|^{str(TEN_MINUTES_AGO_CALLBACK)}$|^{str(FIFTEEN_MINUTES_AGO_CALLBACK)}$|^{str(THIRTY_MINUTES_AGO_CALLBACK)}$|^{str(FORTY_FIVE_MINUTES_AGO_CALLBACK)}$|^{str(ONE_HOUR_AGO_CALLBACK)}$'),
             ],
             CHOOSE_FEEDING_TYPE: [
-                CallbackQueryHandler(choose_feeding_type, pattern=f'^{str(BOTTLE_CALLBACK)}|{str(LEFT_BREAST_CALLBACK)}|{str(RIGHT_BREAST_CALLBACK)}$'),
+                CallbackQueryHandler(choose_feeding_type, pattern=f'^{str(BOTTLE_CALLBACK)}$|^{str(LEFT_BREAST_CALLBACK)}$|^{str(RIGHT_BREAST_CALLBACK)}$'),
             ],
         },
         fallbacks=[MessageHandler(filters.Regex("^Done$"), done)],
