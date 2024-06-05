@@ -31,14 +31,44 @@ from log import logger
 from db import SessionLocal
 from models import FeedingLog, User
 
-# Define states
-CHOOSING_ACTION, CHOOSE_TIME_OPTION, CHOOSE_FEEDING_TYPE = range(3)
-NOW_CALLBACK, FIVE_MINUTES_AGO_CALLBACK, FIFTEEN_MINUTES_AGO_CALLBACK, THIRTY_MINUTES_AGO_CALLBACK, FORTY_FIVE_MINUTES_AGO_CALLBACK, ONE_HOUR_AGO_CALLBACK = range(6)
-BOTTLE_CALLBACK, LEFT_BREAST_CALLBACK, RIGHT_BREAST_CALLBACK = range(3)
-CANCEL_CALLBACK, BACK_CALLBACK = range(2)
+# Define states and callbacks
+(
+    CHOOSING_ACTION,
+    CHOOSE_TIME_OPTION,
+    CHOOSE_FEEDING_TYPE,
+
+    NOW_CALLBACK,
+    FIVE_MINUTES_AGO_CALLBACK,
+    FIFTEEN_MINUTES_AGO_CALLBACK,
+    THIRTY_MINUTES_AGO_CALLBACK,
+    FORTY_FIVE_MINUTES_AGO_CALLBACK,
+    ONE_HOUR_AGO_CALLBACK,
+
+    BOTTLE_CALLBACK,
+    LEFT_BREAST_CALLBACK,
+    RIGHT_BREAST_CALLBACK,
+
+    CANCEL_CALLBACK,
+    BACK_CALLBACK
+) = range(14)
+
+# Define common dictionaries
+FEEDING_TYPE_TEXT = {
+    str(BOTTLE_CALLBACK): "Бутылочка",
+    str(LEFT_BREAST_CALLBACK): "Левая грудь",
+    str(RIGHT_BREAST_CALLBACK): "Правая грудь"
+}
+
+TIME_DELTAS = {
+    str(NOW_CALLBACK): timedelta(),
+    str(FIVE_MINUTES_AGO_CALLBACK): timedelta(minutes=5),
+    str(FIFTEEN_MINUTES_AGO_CALLBACK): timedelta(minutes=15),
+    str(THIRTY_MINUTES_AGO_CALLBACK): timedelta(minutes=30),
+    str(FORTY_FIVE_MINUTES_AGO_CALLBACK): timedelta(minutes=45),
+    str(ONE_HOUR_AGO_CALLBACK): timedelta(hours=1),
+}
 
 # Define inline keyboards
-
 time_option_keyboard = [
     [InlineKeyboardButton("Сейчас", callback_data=str(NOW_CALLBACK))],
     [InlineKeyboardButton("5 минут назад", callback_data=str(FIVE_MINUTES_AGO_CALLBACK))],
@@ -117,18 +147,9 @@ async def choose_time_option(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 logger.error(f"Failed to remove message: {e}")
 
         return CHOOSING_ACTION
-    
-    time_deltas = {
-        str(NOW_CALLBACK): timedelta(),
-        str(FIVE_MINUTES_AGO_CALLBACK): timedelta(minutes=5),
-        str(FIFTEEN_MINUTES_AGO_CALLBACK): timedelta(minutes=15),
-        str(THIRTY_MINUTES_AGO_CALLBACK): timedelta(minutes=30),
-        str(FORTY_FIVE_MINUTES_AGO_CALLBACK): timedelta(minutes=45),
-        str(ONE_HOUR_AGO_CALLBACK): timedelta(hours=1),
-    }
 
-    if query.data in time_deltas:
-        feeding_datetime_argentina = datetime.now(USER_TZ) - time_deltas[query.data]
+    if query.data in TIME_DELTAS:
+        feeding_datetime_argentina = datetime.now(USER_TZ) - TIME_DELTAS[query.data]
         feeding_datetime_server = feeding_datetime_argentina.astimezone(SERVER_TZ)
         context.user_data["feeding_datetime"] = feeding_datetime_server
         message = await query.edit_message_text("Выберите тип кормления:", reply_markup=feeding_type_markup)
@@ -178,11 +199,7 @@ async def log_feeding(update: Update, context: ContextTypes.DEFAULT_TYPE, feedin
     # Convert the feeding time back to Argentina timezone for display
     feeding_datetime_argentina = feeding_datetime.astimezone(USER_TZ)
     formatted_time = feeding_datetime_argentina.strftime("%H:%M")
-    feeding_type_text = {
-        str(BOTTLE_CALLBACK): "Бутылочка",
-        str(LEFT_BREAST_CALLBACK): "Левая грудь",
-        str(RIGHT_BREAST_CALLBACK): "Правая грудь"
-    }[feeding_type]
+    feeding_type_text = FEEDING_TYPE_TEXT.get(feeding_type, "Неизвестный тип")
     await send_message(update, f'Кормление записано на {formatted_time} ({feeding_type_text})!')
 
 async def check_last_feeding(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -201,11 +218,7 @@ async def check_last_feeding(update: Update, context: ContextTypes.DEFAULT_TYPE)
         time_elapsed = datetime.now(USER_TZ) - feeding_datetime_argentina
         hours, remainder = divmod(time_elapsed.seconds, 3600)
         minutes, _ = divmod(remainder, 60)
-        feeding_type_text = {
-            "7": "Бутылочка",
-            "8": "Левая грудь",
-            "9": "Правая грудь"
-        }[last_feeding_log.feeding_type]
+        feeding_type_text = FEEDING_TYPE_TEXT.get(last_feeding_log.feeding_type, "Неизвестный тип")
         text = f'Последнее кормление было в {formatted_time} ({feeding_type_text}). Прошло времени: {hours} часов {minutes} минут.'
     else:
         text = "Нет записей о кормлении."
@@ -231,11 +244,7 @@ async def display_24h_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         for log in feeding_logs:
             feeding_datetime_argentina = log.timestamp.astimezone(USER_TZ)
             formatted_time = feeding_datetime_argentina.strftime("%H:%M")
-            feeding_type_text = {
-                str(BOTTLE_CALLBACK): "Бутылочка",
-                str(LEFT_BREAST_CALLBACK): "Левая грудь",
-                str(RIGHT_BREAST_CALLBACK): "Правая грудь"
-            }[log.feeding_type]
+            feeding_type_text = FEEDING_TYPE_TEXT.get(log.feeding_type, "Неизвестный тип")
             stats_text += f'{formatted_time} - {feeding_type_text}\n'
             feeding_counts[log.feeding_type] += 1
 
@@ -325,10 +334,10 @@ def main() -> None:
                 MessageHandler(filters.TEXT & ~filters.COMMAND, choose_action),
             ],
             CHOOSE_TIME_OPTION: [
-                CallbackQueryHandler(choose_time_option, pattern=f'^{str(NOW_CALLBACK)}$|^{str(FIVE_MINUTES_AGO_CALLBACK)}$|^{str(FIFTEEN_MINUTES_AGO_CALLBACK)}$|^{str(THIRTY_MINUTES_AGO_CALLBACK)}$|^{str(FORTY_FIVE_MINUTES_AGO_CALLBACK)}$|^{str(ONE_HOUR_AGO_CALLBACK)}$|^{str(CANCEL_CALLBACK)}$'),
+                CallbackQueryHandler(choose_time_option, pattern=f'^{str(NOW_CALLBACK)}$|^{str(FIVE_MINUTES_AGO_CALLBACK)}$|^{str(FIFTEEN_MINUTES_AGO_CALLBACK)}$|^{str(THIRTY_MINUTES_AGO_CALLBACK)}$|^{str(FORTY_FIVE_MINUTES_AGO_CALLBACK)}$|^{str(ONE_HOUR_AGO_CALLBACK)}$|^{str(CANCEL_CALLBACK)}'),
             ],
             CHOOSE_FEEDING_TYPE: [
-                CallbackQueryHandler(choose_feeding_type, pattern=f'^{str(BOTTLE_CALLBACK)}$|^{str(LEFT_BREAST_CALLBACK)}$|^{str(RIGHT_BREAST_CALLBACK)}$|^{str(BACK_CALLBACK)}$'),
+                CallbackQueryHandler(choose_feeding_type, pattern=f'^{str(BOTTLE_CALLBACK)}$|^{str(LEFT_BREAST_CALLBACK)}$|^{str(RIGHT_BREAST_CALLBACK)}$|^{str(BACK_CALLBACK)}'),
             ],
         },
         fallbacks=[MessageHandler(filters.Regex("^Done$"), done)],
