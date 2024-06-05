@@ -46,3 +46,8 @@ docker-run:
 .PHONY: init-db
 init-db: venv
 	$(PYTHON) src/create_tables.py
+
+# Run the production container
+.PHONY: prod
+prod:
+	docker compose up -d --build
