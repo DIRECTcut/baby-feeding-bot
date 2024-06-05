@@ -5,7 +5,7 @@ import pytz
 from tzlocal import get_localzone
 from zoneinfo import ZoneInfo
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -37,11 +37,6 @@ NOW_CALLBACK, FIVE_MINUTES_AGO_CALLBACK, FIFTEEN_MINUTES_AGO_CALLBACK, THIRTY_MI
 BOTTLE_CALLBACK, LEFT_BREAST_CALLBACK, RIGHT_BREAST_CALLBACK = range(7, 10)
 
 # Define inline keyboards
-inline_keyboard = [
-    [InlineKeyboardButton("Записать кормление", callback_data='log_feeding')],
-    [InlineKeyboardButton("Проверить последнее кормление", callback_data='check_last_feeding')],
-]
-inline_markup = InlineKeyboardMarkup(inline_keyboard)
 
 time_option_keyboard = [
     [InlineKeyboardButton("Сейчас", callback_data=str(NOW_CALLBACK))],
@@ -60,6 +55,13 @@ feeding_type_keyboard = [
 ]
 feeding_type_markup = InlineKeyboardMarkup(feeding_type_keyboard)
 
+# Define reply keyboard
+reply_keyboard = [
+    [KeyboardButton("Записать кормление")],
+    [KeyboardButton("Проверить последнее кормление")],
+]
+reply_markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False, resize_keyboard=True)
+
 USER_TZ = pytz.timezone('America/Argentina/Buenos_Aires')
 SERVER_TZ = get_localzone()
 
@@ -70,29 +72,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     message = await update.message.reply_text(
         "Привет! Давайте запишем новое кормление или проверим последнее кормление. Выберите опцию ниже:",
-        reply_markup=inline_markup
+        reply_markup=reply_markup
     )
     context.user_data['start_message_id'] = message.message_id
     return CHOOSING_ACTION
 
 async def choose_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle the user's choice of action."""
-    query = update.callback_query
-    await query.answer()
+    text = update.message.text
     
-    if query.data == 'log_feeding':
-        message = await query.edit_message_text("Когда произошло кормление?", reply_markup=time_option_markup)
+    if text == 'Записать кормление':
+        message = await update.message.reply_text("Когда произошло кормление?", reply_markup=time_option_markup)
         context.user_data['time_option_message_id'] = message.message_id
         return CHOOSE_TIME_OPTION
-    elif query.data == 'check_last_feeding':
+    elif text == 'Проверить последнее кормление':
         await check_last_feeding(update, context)
-        await query.edit_message_text(
-            "Привет! Давайте запишем новое кормление или проверим последнее кормление. Выберите опцию ниже:",
-            reply_markup=inline_markup
-        )
         return CHOOSING_ACTION
 
-    await query.edit_message_text("Неверный выбор. Пожалуйста, выберите 'Записать кормление' или 'Проверить последнее кормление'.")
+    await update.message.reply_text("Неверный выбор. Пожалуйста, выберите 'Записать кормление' или 'Проверить последнее кормление'.")
     return CHOOSING_ACTION
 
 async def choose_time_option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -130,10 +127,7 @@ async def choose_feeding_type(update: Update, context: ContextTypes.DEFAULT_TYPE
     await log_feeding(update, context, feeding_datetime, feeding_type)
     await delete_log_message(update, context)
     await delete_feeding_type_message(update, context)
-    await send_message(update, 
-        "Добавить еще?",
-        reply_markup=inline_markup,
-    )
+
     return CHOOSING_ACTION
 
 async def log_feeding(update: Update, context: ContextTypes.DEFAULT_TYPE, feeding_datetime: datetime, feeding_type: str) -> None:
@@ -192,10 +186,6 @@ async def check_last_feeding(update: Update, context: ContextTypes.DEFAULT_TYPE)
         text = "Нет записей о кормлении."
 
     await send_message(update, text)
-    await send_message(update,
-        "Привет! Давайте запишем новое кормление или проверим последнее кормление. Выберите опцию ниже:",
-        reply_markup=inline_markup
-    )
 
 async def send_message(update: Update, text: str, reply_markup=None) -> None:
     """Send a message to the user, handling both message and callback_query contexts."""
@@ -266,7 +256,7 @@ def main() -> None:
         entry_points=[CommandHandler("start", start)],
         states={
             CHOOSING_ACTION: [
-                CallbackQueryHandler(choose_action, pattern='^log_feeding$|^check_last_feeding$'),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, choose_action),
             ],
             CHOOSE_TIME_OPTION: [
                 CallbackQueryHandler(choose_time_option, pattern=f'^{str(NOW_CALLBACK)}$|^{str(FIVE_MINUTES_AGO_CALLBACK)}$|^{str(FIFTEEN_MINUTES_AGO_CALLBACK)}$|^{str(THIRTY_MINUTES_AGO_CALLBACK)}$|^{str(FORTY_FIVE_MINUTES_AGO_CALLBACK)}$|^{str(ONE_HOUR_AGO_CALLBACK)}$'),
