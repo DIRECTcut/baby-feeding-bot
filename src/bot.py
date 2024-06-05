@@ -214,7 +214,7 @@ async def check_last_feeding(update: Update, context: ContextTypes.DEFAULT_TYPE)
     session = SessionLocal()
 
     # Fetch the last feeding log for the user
-    last_feeding_log = session.query(FeedingLog).join(User).filter(User.username == username).order_by(FeedingLog.timestamp.desc()).first()
+    last_feeding_log = session.query(FeedingLog).join(User).order_by(FeedingLog.timestamp.desc()).first()
     
     if last_feeding_log:
         # Convert the feeding time back to Argentina timezone for display
@@ -239,7 +239,7 @@ async def display_24h_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     twenty_four_hours_ago = now - timedelta(hours=24)
 
     # Fetch the feeding logs for the last 24 hours
-    feeding_logs = session.query(FeedingLog).join(User).filter(User.username == username, FeedingLog.timestamp >= twenty_four_hours_ago).order_by(FeedingLog.timestamp).all()
+    feeding_logs = session.query(FeedingLog).join(User).filter(FeedingLog.timestamp >= twenty_four_hours_ago).order_by(FeedingLog.timestamp).all()
 
     if feeding_logs:
         stats_text = "Статистика кормлений за последние 24 часа:\n\n"
@@ -258,6 +258,12 @@ async def display_24h_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             stats_text += f'{formatted_time} - {feeding_type_text}\n'
             feeding_counts[log.feeding_type] += 1
             previous_feeding_time = feeding_datetime_argentina
+
+        # Calculate the time since the last feeding
+        time_since_last_feeding = now.astimezone(USER_TZ) - previous_feeding_time
+        hours_since_last, remainder_since_last = divmod(time_since_last_feeding.seconds, 3600)
+        minutes_since_last, _ = divmod(remainder_since_last, 60)
+        stats_text += f'    прошло {hours_since_last:02}:{minutes_since_last:02}\n'
 
         stats_text += "\nКоличество кормлений по типам:\n"
         stats_text += f'Бутылочка: {feeding_counts[str(BOTTLE_CALLBACK)]}\n'
@@ -307,7 +313,7 @@ async def notify_users(context: CallbackContext) -> None:
     for username in TELEGRAM_USERNAME_WHITELIST:
         user = session.query(User).filter_by(username=username).first()
         if user:
-            last_feeding_log = session.query(FeedingLog).filter_by(user_id=user.id).order_by(FeedingLog.timestamp.desc()).first()
+            last_feeding_log = session.query(FeedingLog).order_by(FeedingLog.timestamp.desc()).first()
             if last_feeding_log:
                 last_feeding_time = last_feeding_log.timestamp
 
