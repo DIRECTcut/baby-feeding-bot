@@ -46,7 +46,7 @@ time_option_keyboard = [
     [InlineKeyboardButton("30 минут назад", callback_data=str(THIRTY_MINUTES_AGO_CALLBACK))],
     [InlineKeyboardButton("45 минут назад", callback_data=str(FORTY_FIVE_MINUTES_AGO_CALLBACK))],
     [InlineKeyboardButton("1 час назад", callback_data=str(ONE_HOUR_AGO_CALLBACK))],
-    [InlineKeyboardButton("Отмена", callback_data=str(CANCEL_CALLBACK))],
+    [InlineKeyboardButton("Oтмена", callback_data=str(CANCEL_CALLBACK))],
 ]
 time_option_markup = InlineKeyboardMarkup(time_option_keyboard)
 
@@ -62,6 +62,7 @@ feeding_type_markup = InlineKeyboardMarkup(feeding_type_keyboard)
 reply_keyboard = [
     [KeyboardButton("Записать кормление")],
     [KeyboardButton("Проверить последнее кормление")],
+    [KeyboardButton("Статистика за последние 24 часа")],  # New button for 24-hour stats
 ]
 reply_markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False, resize_keyboard=True)
 
@@ -95,8 +96,11 @@ async def choose_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     elif text == 'Проверить последнее кормление':
         await check_last_feeding(update, context)
         return CHOOSING_ACTION
+    elif text == 'Статистика за последние 24 часа':
+        await display_24h_stats(update, context)
+        return CHOOSING_ACTION
 
-    await update.message.reply_text("Неверный выбор. Пожалуйста, выберите 'Записать кормление' или 'Проверить последнее кормление'.")
+    await update.message.reply_text("Неверный выбор. Пожалуйста, выберите 'Записать кормление', 'Проверить последнее кормление' или 'Статистика за последние 24 часа'.")
     return CHOOSING_ACTION
 
 async def choose_time_option(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -110,7 +114,7 @@ async def choose_time_option(update: Update, context: ContextTypes.DEFAULT_TYPE)
             try:
                 await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=context.user_data['time_option_message_id'])
             except Exception as e:
-                logger.error(f"Не удалось удалить сообщение: {e}")
+                logger.error(f"Failed to remove message: {e}")
 
         return CHOOSING_ACTION
     
@@ -183,7 +187,6 @@ async def log_feeding(update: Update, context: ContextTypes.DEFAULT_TYPE, feedin
 
 async def check_last_feeding(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Function to check and display the last feeding log."""
-    user_id = update.effective_user.id
     username = update.effective_user.username
 
     session = SessionLocal()
@@ -209,6 +212,47 @@ async def check_last_feeding(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     await send_message(update, text)
 
+async def display_24h_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Function to display feeding stats for the last 24 hours."""
+    username = update.effective_user.username
+
+    session = SessionLocal()
+    now = datetime.now(SERVER_TZ)
+    twenty_four_hours_ago = now - timedelta(hours=24)
+
+    # Fetch the feeding logs for the last 24 hours
+    feeding_logs = session.query(FeedingLog).join(User).filter(User.username == username, FeedingLog.timestamp >= twenty_four_hours_ago).order_by(FeedingLog.timestamp).all()
+
+    if feeding_logs:
+        stats_text = "Статистика кормлений за последние 24 часа:\n\n"
+        feeding_counts = {str(BOTTLE_CALLBACK): 0, str(LEFT_BREAST_CALLBACK): 0, str(RIGHT_BREAST_CALLBACK): 0}
+        previous_feeding_time = None
+
+        for log in feeding_logs:
+            feeding_datetime_argentina = log.timestamp.astimezone(USER_TZ)
+            formatted_time = feeding_datetime_argentina.strftime("%H:%M")
+            feeding_type_text = {
+                str(BOTTLE_CALLBACK): "Бутылочка",
+                str(LEFT_BREAST_CALLBACK): "Левая грудь",
+                str(RIGHT_BREAST_CALLBACK): "Правая грудь"
+            }[log.feeding_type]
+            stats_text += f'{formatted_time} - {feeding_type_text}\n'
+            feeding_counts[log.feeding_type] += 1
+
+            if previous_feeding_time:
+                time_between_feedings = feeding_datetime_argentina - previous_feeding_time
+                stats_text += f'Время между кормлениями: {time_between_feedings}\n'
+            previous_feeding_time = feeding_datetime_argentina
+
+        stats_text += "\nКоличество кормлений по типам:\n"
+        stats_text += f'Бутылочка: {feeding_counts[str(BOTTLE_CALLBACK)]}\n'
+        stats_text += f'Левая грудь: {feeding_counts[str(LEFT_BREAST_CALLBACK)]}\n'
+        stats_text += f'Правая грудь: {feeding_counts[str(RIGHT_BREAST_CALLBACK)]}\n'
+    else:
+        stats_text = "Нет записей о кормлении за последние 24 часа."
+
+    await send_message(update, stats_text)
+
 async def send_message(update: Update, text: str, reply_markup=None) -> None:
     """Send a message to the user, handling both message and callback_query contexts."""
     if update.message:
@@ -222,7 +266,7 @@ async def delete_log_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
         try:
             await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=context.user_data['log_message_id'])
         except Exception as e:
-            logger.error(f"Не удалось удалить сообщение: {e}")
+            logger.error(f"Failed to remove message: {e}")
 
 async def delete_feeding_type_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Delete the feeding type message after the user selects a feeding type."""
@@ -230,7 +274,7 @@ async def delete_feeding_type_message(update: Update, context: ContextTypes.DEFA
         try:
             await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=context.user_data['feeding_type_message_id'])
         except Exception as e:
-            logger.error(f"Не удалось удалить сообщение: {e}")
+            logger.error(f"Failed to remove message: {e}")
 
 async def done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """End the conversation."""
