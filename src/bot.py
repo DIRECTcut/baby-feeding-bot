@@ -245,12 +245,13 @@ async def display_24h_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             feeding_datetime_argentina = log.timestamp.astimezone(USER_TZ)
             formatted_time = feeding_datetime_argentina.strftime("%H:%M")
             feeding_type_text = FEEDING_TYPE_TEXT.get(log.feeding_type, "Неизвестный тип")
-            stats_text += f'{formatted_time} - {feeding_type_text}\n'
-            feeding_counts[log.feeding_type] += 1
-
             if previous_feeding_time:
                 time_between_feedings = feeding_datetime_argentina - previous_feeding_time
-                stats_text += f'Время между кормлениями: {time_between_feedings}\n'
+                hours, remainder = divmod(time_between_feedings.seconds, 3600)
+                minutes, _ = divmod(remainder, 60)
+                stats_text += f'    через {hours:02}:{minutes:02}:\n'
+            stats_text += f'{formatted_time} - {feeding_type_text}\n'
+            feeding_counts[log.feeding_type] += 1
             previous_feeding_time = feeding_datetime_argentina
 
         stats_text += "\nКоличество кормлений по типам:\n"
@@ -310,15 +311,20 @@ async def notify_users(context: CallbackContext) -> None:
                     last_feeding_time = last_feeding_time.replace(tzinfo=ZoneInfo(str(SERVER_TZ)))
 
                 time_passed = now - last_feeding_time
-                time_passed_minutes = divmod(time_passed.total_seconds(), 60)[0]  # Convert to minutes
+                hours, remainder = divmod(time_passed.seconds, 3600)
+                minutes, _ = divmod(remainder, 60)
 
                 if time_passed > notification_interval:
                     # Convert the time to Argentina timezone for display
                     last_feeding_time_argentina = last_feeding_time.astimezone(USER_TZ)
                     formatted_time = last_feeding_time_argentina.strftime("%H:%M")
+                    if hours > 0:
+                        time_passed_text = f'{hours} часов {minutes} минут'
+                    else:
+                        time_passed_text = f'{minutes} минут'
                     await context.bot.send_message(
                         chat_id=user.id,
-                        text=f'Прошло {int(time_passed_minutes)} минут с последнего кормления в {formatted_time}. Пожалуйста, проверьте.'
+                        text=f'Прошло {time_passed_text} с последнего кормления в {formatted_time}. Пожалуйста, проверьте.'
                     )
 
 def main() -> None:
