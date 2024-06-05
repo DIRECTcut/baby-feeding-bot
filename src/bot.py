@@ -44,13 +44,18 @@ from models import FeedingLog, User
     FORTY_FIVE_MINUTES_AGO_CALLBACK,
     ONE_HOUR_AGO_CALLBACK,
 
+    CANCEL_CALLBACK,
+    BACK_CALLBACK
+) = range(11)
+
+# These are written to a feeding_logs.feeding_type, don't change
+# these specific numbers are here for historical reasons
+# TODO: create a separate enum for feeding_logs.feeding_type
+(
     BOTTLE_CALLBACK,
     LEFT_BREAST_CALLBACK,
     RIGHT_BREAST_CALLBACK,
-
-    CANCEL_CALLBACK,
-    BACK_CALLBACK
-) = range(14)
+) = (7,8,9)
 
 # Define common dictionaries
 FEEDING_TYPE_TEXT = {
