@@ -34,7 +34,8 @@ from models import FeedingLog, User
 # Define states
 CHOOSING_ACTION, CHOOSE_TIME_OPTION, CHOOSE_FEEDING_TYPE = range(3)
 NOW_CALLBACK, FIVE_MINUTES_AGO_CALLBACK, FIFTEEN_MINUTES_AGO_CALLBACK, THIRTY_MINUTES_AGO_CALLBACK, FORTY_FIVE_MINUTES_AGO_CALLBACK, ONE_HOUR_AGO_CALLBACK = range(6)
-BOTTLE_CALLBACK, LEFT_BREAST_CALLBACK, RIGHT_BREAST_CALLBACK = range(7, 10)
+BOTTLE_CALLBACK, LEFT_BREAST_CALLBACK, RIGHT_BREAST_CALLBACK = range(3)
+CANCEL_CALLBACK, BACK_CALLBACK = range(2)
 
 # Define inline keyboards
 
@@ -45,6 +46,7 @@ time_option_keyboard = [
     [InlineKeyboardButton("30 минут назад", callback_data=str(THIRTY_MINUTES_AGO_CALLBACK))],
     [InlineKeyboardButton("45 минут назад", callback_data=str(FORTY_FIVE_MINUTES_AGO_CALLBACK))],
     [InlineKeyboardButton("1 час назад", callback_data=str(ONE_HOUR_AGO_CALLBACK))],
+    [InlineKeyboardButton("Отмена", callback_data=str(CANCEL_CALLBACK))],
 ]
 time_option_markup = InlineKeyboardMarkup(time_option_keyboard)
 
@@ -52,6 +54,7 @@ feeding_type_keyboard = [
     [InlineKeyboardButton("Бутылочка", callback_data=str(BOTTLE_CALLBACK))],
     [InlineKeyboardButton("Левая грудь", callback_data=str(LEFT_BREAST_CALLBACK))],
     [InlineKeyboardButton("Правая грудь", callback_data=str(RIGHT_BREAST_CALLBACK))],
+    [InlineKeyboardButton("Назад", callback_data=str(BACK_CALLBACK))],
 ]
 feeding_type_markup = InlineKeyboardMarkup(feeding_type_keyboard)
 
@@ -82,6 +85,10 @@ async def choose_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     text = update.message.text
     
     if text == 'Записать кормление':
+        # Reset context data related to time option and feeding type
+        context.user_data.pop('time_option_message_id', None)
+        context.user_data.pop('feeding_type_message_id', None)
+
         message = await update.message.reply_text("Когда произошло кормление?", reply_markup=time_option_markup)
         context.user_data['time_option_message_id'] = message.message_id
         return CHOOSE_TIME_OPTION
@@ -97,6 +104,15 @@ async def choose_time_option(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
     context.user_data["time_option"] = query.data
+    
+    if query.data == str(CANCEL_CALLBACK):
+        if 'time_option_message_id' in context.user_data:
+            try:
+                await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=context.user_data['time_option_message_id'])
+            except Exception as e:
+                logger.error(f"Не удалось удалить сообщение: {e}")
+
+        return CHOOSING_ACTION
     
     time_deltas = {
         str(NOW_CALLBACK): timedelta(),
@@ -119,6 +135,12 @@ async def choose_feeding_type(update: Update, context: ContextTypes.DEFAULT_TYPE
     """Handle the user's choice of feeding type."""
     query = update.callback_query
     await query.answer()
+    
+    if query.data == str(BACK_CALLBACK):
+        message = await query.edit_message_text("Когда произошло кормление?", reply_markup=time_option_markup)
+        context.user_data['time_option_message_id'] = message.message_id
+        return CHOOSE_TIME_OPTION
+    
     context.user_data["feeding_type"] = query.data
     
     feeding_datetime = context.user_data["feeding_datetime"]
@@ -259,10 +281,10 @@ def main() -> None:
                 MessageHandler(filters.TEXT & ~filters.COMMAND, choose_action),
             ],
             CHOOSE_TIME_OPTION: [
-                CallbackQueryHandler(choose_time_option, pattern=f'^{str(NOW_CALLBACK)}$|^{str(FIVE_MINUTES_AGO_CALLBACK)}$|^{str(FIFTEEN_MINUTES_AGO_CALLBACK)}$|^{str(THIRTY_MINUTES_AGO_CALLBACK)}$|^{str(FORTY_FIVE_MINUTES_AGO_CALLBACK)}$|^{str(ONE_HOUR_AGO_CALLBACK)}$'),
+                CallbackQueryHandler(choose_time_option, pattern=f'^{str(NOW_CALLBACK)}$|^{str(FIVE_MINUTES_AGO_CALLBACK)}$|^{str(FIFTEEN_MINUTES_AGO_CALLBACK)}$|^{str(THIRTY_MINUTES_AGO_CALLBACK)}$|^{str(FORTY_FIVE_MINUTES_AGO_CALLBACK)}$|^{str(ONE_HOUR_AGO_CALLBACK)}$|^{str(CANCEL_CALLBACK)}$'),
             ],
             CHOOSE_FEEDING_TYPE: [
-                CallbackQueryHandler(choose_feeding_type, pattern=f'^{str(BOTTLE_CALLBACK)}$|^{str(LEFT_BREAST_CALLBACK)}$|^{str(RIGHT_BREAST_CALLBACK)}$'),
+                CallbackQueryHandler(choose_feeding_type, pattern=f'^{str(BOTTLE_CALLBACK)}$|^{str(LEFT_BREAST_CALLBACK)}$|^{str(RIGHT_BREAST_CALLBACK)}$|^{str(BACK_CALLBACK)}$'),
             ],
         },
         fallbacks=[MessageHandler(filters.Regex("^Done$"), done)],
