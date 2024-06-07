@@ -101,6 +101,7 @@ reply_keyboard = [
 ]
 reply_markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False, resize_keyboard=True)
 
+# TODO: add proper support for timezones
 USER_TZ = pytz.timezone('America/Argentina/Buenos_Aires')
 SERVER_TZ = get_localzone()
 
